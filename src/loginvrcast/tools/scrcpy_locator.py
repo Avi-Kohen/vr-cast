@@ -5,11 +5,18 @@ import sys
 
 
 def _resource_base_dir() -> Path:
-    # PyInstaller support
+    # PyInstaller
     if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
         return Path(sys._MEIPASS)
-    # dev mode: repo root is two levels up from this file: src/loginvrcast/tools/...
-    return Path(__file__).resolve().parents[3]
+
+    # Dev mode (editable install): walk up until we find resources/scrcpy
+    here = Path(__file__).resolve()
+    for parent in [here, *here.parents]:
+        if (parent / "resources" / "scrcpy").exists():
+            return parent
+
+    # Fallback: typical src layout
+    return here.parents[3]
 
 
 def scrcpy_bundle_dir() -> Path:
