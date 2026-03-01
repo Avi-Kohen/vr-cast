@@ -1,4 +1,5 @@
 from __future__ import annotations
+import sys
 
 from pathlib import Path
 from PySide6.QtWidgets import QApplication
@@ -11,7 +12,7 @@ from loginvrcast.ui.main_window import MainWindow
 
 
 def main() -> int:
-    app = QApplication([])
+    app = QApplication(sys.argv)
     icon_path = Path(__file__).parent / "resources" / "icon.png"
     app.setWindowIcon(QIcon(str(icon_path)))
     settings = SettingsStore.load()
@@ -23,3 +24,6 @@ def main() -> int:
 
     monitor.start()  # 3s polling
     return app.exec()
+
+if __name__ == "__main__":
+    raise SystemExit(main())
