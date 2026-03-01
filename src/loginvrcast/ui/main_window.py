@@ -86,10 +86,16 @@ class MainWindow(QMainWindow):
         adv_layout.addRow("Quality", self.quality_combo)
 
         # Crop mode
+        # Crop mode (replace your current addItems(["official","client"]) block)
         self.crop_mode_combo = QComboBox()
-        self.crop_mode_combo.addItems(["official", "client"])
-        self.crop_mode_combo.setCurrentText(self.settings_store.settings.crop_mode)
-        self.crop_mode_combo.currentTextChanged.connect(self._on_settings_changed)
+        self.crop_mode_combo.addItem("Official crop (--crop)", "official")
+        self.crop_mode_combo.addItem("Client crop (--client-crop)", "client")
+
+        # set current from settings
+        idx = self.crop_mode_combo.findData(self.settings_store.settings.crop_mode)
+        self.crop_mode_combo.setCurrentIndex(idx if idx != -1 else 0)
+
+        self.crop_mode_combo.currentIndexChanged.connect(self._on_settings_changed)
         adv_layout.addRow("Crop mode", self.crop_mode_combo)
 
         # Crop preset
@@ -128,7 +134,7 @@ class MainWindow(QMainWindow):
     def _on_settings_changed(self, *_):
         s = self.settings_store.settings
         s.quality_preset = self.quality_combo.currentText()
-        s.crop_mode = self.crop_mode_combo.currentText()
+        s.crop_mode = self.crop_mode_combo.currentData()
         s.crop_value = self.crop_combo.currentText()
         if sys.platform.startswith("win"):
             s.windows_renderer = self.renderer_combo.currentText()

@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 from loginvrcast.core.state import AdbStatus
+from loginvrcast.tools.subprocess_utils import run_quiet
 
 
 def _is_windows() -> bool:
@@ -41,7 +42,8 @@ def validate_platform_tools_dir(dir_path: Path) -> tuple[bool, str]:
 
     # Validate it actually runs
     try:
-        subprocess.run([str(adb_path), "version"], capture_output=True, text=True, timeout=2, check=True)
+        from loginvrcast.tools.subprocess_utils import run_quiet
+        run_quiet([str(adb_path), "version"], timeout=2)
     except Exception:
         return False, "adb failed to run."
 
