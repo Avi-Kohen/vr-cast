@@ -80,6 +80,9 @@ class AdbMonitor(QObject):
 
         self._pool = QThreadPool.globalInstance()
         self._poll_inflight = False
+        self._poll_pending = False
+        self._poll_seq = 0
+        self._current_task = None  # keep a ref so task/signals don't get GC'd
 
         self._adb: AdbStatus | None = None
         self._devices: list[DeviceInfo] = []
@@ -93,64 +96,102 @@ class AdbMonitor(QObject):
     def stop(self) -> None:
         self._timer.stop()
     
-    def _on_poll_done(self, devices: list, selected_serial: str, selected_model: str) -> None:
+    def _start_poll(self, adb_path: str) -> None:
+        self._poll_inflight = True
+        self._poll_pending = False
+        self._poll_seq += 1
+        seq = self._poll_seq
+
+        task = _AdbPollTask(adb_path, self._selected_serial)
+        self._current_task = task  # keep alive
+
+        task.signals.done.connect(
+            lambda devices, selected_serial, selected_model, seq=seq:
+                self._on_poll_done(seq, devices, selected_serial, selected_model)
+        )
+        task.signals.failed.connect(
+            lambda msg, seq=seq: self._on_poll_failed(seq, msg)
+        )
+        self._pool.start(task)
+
+
+    def _on_poll_done(self, seq: int, devices: list, selected_serial: str, selected_model: str) -> None:
+        # Ignore stale tasks
+        if seq != self._poll_seq:
+            return
+
         self._poll_inflight = False
+        self._current_task = None
         self._devices = list(devices)
 
-        # default selection = first detected, but don’t fight user while it exists
-        self._selected_serial = selected_serial or None
+        # Keep user selection if still exists; otherwise fallback to suggested/first
+        serials = {d.serial for d in self._devices}
+        if self._selected_serial in serials:
+            chosen = self._selected_serial
+        elif selected_serial in serials:
+            chosen = selected_serial
+        else:
+            chosen = self._devices[0].serial if self._devices else None
 
-    # apply model only for selected
-        if self._selected_serial and selected_model:
-            self._model_cache[self._selected_serial] = selected_model
-            self._apply_model(self._selected_serial, selected_model)
+        self._selected_serial = chosen
+
+        # Apply model only for selected
+        if chosen and selected_model:
+            self._model_cache[chosen] = selected_model
+            self._apply_model(chosen, selected_model)
 
         self.devices_changed.emit(self._devices)
 
-    def _on_poll_failed(self, msg: str) -> None:
+        # If refresh was requested while polling, poll again immediately
+        if self._poll_pending and self._adb and self._adb.ok and self._adb.adb_path:
+            self._start_poll(self._adb.adb_path)
+
+
+    def _on_poll_failed(self, seq: int, msg: str) -> None:
+        if seq != self._poll_seq:
+            return
+
         self._poll_inflight = False
-        # keep it simple: don’t crash; just clear list
-        self._devices = []
-        self.devices_changed.emit(self._devices)
-        
+        self._current_task = None
+
+        # Clear devices (don’t crash UI)
+        if self._devices:
+            self._devices = []
+            self.devices_changed.emit(self._devices)
+
+        if self._poll_pending and self._adb and self._adb.ok and self._adb.adb_path:
+            self._start_poll(self._adb.adb_path)
+            
         
     def refresh(self) -> None:
         app_dir = app_dir_for_user_files()
         adb = find_adb(self._settings_store.settings.platform_tools_dir, app_dir)
-        if (self._adb is None) or (adb.ok != self._adb.ok) or (adb.adb_path != self._adb.adb_path) or (adb.message != self._adb.message):
+
+        # Emit status only when it actually changes
+        if (
+            self._adb is None
+            or adb.ok != self._adb.ok
+            or adb.adb_path != self._adb.adb_path
+            or adb.message != self._adb.message
+        ):
             self._adb = adb
             self.adb_status_changed.emit(adb)
 
+        # If adb not available -> clear devices once
         if not adb.ok or not adb.adb_path:
-            self._devices = []
-            self.devices_changed.emit(self._devices)
+            if self._devices:
+                self._devices = []
+                self._selected_serial = None
+                self.devices_changed.emit(self._devices)
             return
+
+        # If a poll is already running, mark pending and bail
         if self._poll_inflight:
-            return  # skip if previous poll still running (should be rare, but just in case)  
-        
-        self._poll_inflight = True
-        task = _AdbPollTask(adb.adb_path, self._selected_serial)
-        task.signals.done.connect(self._on_poll_done)
-        task.signals.failed.connect(self._on_poll_failed)
-        self._pool.start(task)
-        
-        # Get device list
-        devices = self._run_devices(adb.adb_path)
-        self._devices = devices
+            self._poll_pending = True
+            return
 
-        # Default selection: first detected device
-        if devices:
-            if self._selected_serial not in {d.serial for d in devices}:
-                self._selected_serial = devices[0].serial
-        else:
-            self._selected_serial = None
-
-        # Enrich model only for selected device (CPU-light)
-        if self._selected_serial:
-            self._maybe_fetch_model(adb.adb_path, self._selected_serial)
-
-        # Emit updated list
-        self.devices_changed.emit(self._devices)
+        # Start poll via the seq-safe path
+        self._start_poll(adb.adb_path)
 
     def set_selected_serial(self, serial: str | None) -> None:
         self._selected_serial = serial
@@ -168,18 +209,18 @@ class AdbMonitor(QObject):
 
     def _run_devices(self, adb_path: str) -> list[DeviceInfo]:
         try:
-            cp = subprocess.run([adb_path, "devices", "-l"], capture_output=True, text=True, timeout=2, check=True)
+            cp = run_quiet([adb_path, "devices", "-l"], timeout=2)
         except Exception:
             return []
 
-        lines = [ln.strip() for ln in cp.stdout.splitlines() if ln.strip()]
+        lines = [ln.strip() for ln in (cp.stdout or "").splitlines() if ln.strip()]
         out: list[DeviceInfo] = []
-        for ln in lines[1:]:  # skip header "List of devices attached"
+        for ln in lines[1:]:
             parts = ln.split()
-            if not parts:
+            if len(parts) < 2:
                 continue
             serial = parts[0]
-            state = parts[1] if len(parts) > 1 else "unknown"
+            state = parts[1]
             model = None
             for p in parts[2:]:
                 if p.startswith("model:"):
@@ -205,14 +246,11 @@ class AdbMonitor(QObject):
             return
 
         try:
-            cp = subprocess.run(
+            cp = run_quiet(
                 [adb_path, "-s", serial, "shell", "getprop", "ro.product.model"],
-                capture_output=True,
-                text=True,
                 timeout=2,
-                check=True,
             )
-            model = cp.stdout.strip() or "Unknown"
+            model = (cp.stdout or "").strip() or "Unknown"
         except Exception:
             model = "Unknown"
 

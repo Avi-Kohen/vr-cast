@@ -67,7 +67,8 @@ class ScrcpyManager(QObject):
             self._proc = None
             return
         try:
-            self._proc.terminate()
+            if self._proc is not None:
+                self._proc.terminate()
         except Exception:
             pass
         self._proc = None
