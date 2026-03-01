@@ -67,7 +67,7 @@ def find_adb(platform_tools_dir: str | None, app_dir: Path) -> AdbStatus:
     which = shutil.which(adb_filename())
     if which:
         try:
-            subprocess.run([which, "version"], capture_output=True, text=True, timeout=2, check=True)
+            run_quiet([which, "version"], timeout=2)
             return AdbStatus(True, "ADB OK (PATH)", which)
         except Exception:
             pass

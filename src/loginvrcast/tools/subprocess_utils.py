@@ -8,10 +8,23 @@ from typing import Sequence
 def run_quiet(args: Sequence[str], *, timeout: float = 2.0) -> subprocess.CompletedProcess:
     """
     Run a subprocess without flashing a console window on Windows.
+    Captures stdout/stderr as text.
     """
-    kwargs = dict(capture_output=True, text=True, timeout=timeout)
+    kwargs: dict = dict(
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+        stdin=subprocess.DEVNULL,
+    )
 
     if sys.platform.startswith("win"):
-        # Prevent console window popups for console child processes.
-        kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW  # Windows-only constant
-    return subprocess.run(list(args), check=True, **kwargs)
+        # Primary: don't create a console window.
+        kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+
+        # Extra safety: hide any window if created by the child process.
+        si = subprocess.STARTUPINFO()
+        si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        si.wShowWindow = subprocess.SW_HIDE
+        kwargs["startupinfo"] = si
+
+    return subprocess.run(list(args), **kwargs)

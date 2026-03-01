@@ -7,7 +7,7 @@ import sys
 def _resource_base_dir() -> Path:
     # PyInstaller
     if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
-        return Path(sys._MEIPASS)
+        return Path(getattr(sys, "_MEIPASS"))
 
     # Dev mode (editable install): walk up until we find resources/scrcpy
     here = Path(__file__).resolve()
@@ -30,5 +30,5 @@ def scrcpy_path_for_current_os() -> Path:
     if sys.platform.startswith("win"):
         return bundle / "win-x64" / "scrcpy.exe"
     if sys.platform == "darwin":
-        return bundle / "macos-arm64" / "scrcpy"
+        return bundle / "macos-arm-64" / "scrcpy"
     raise RuntimeError("Unsupported OS in v1 (Windows + macOS only).")

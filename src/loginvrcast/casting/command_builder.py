@@ -31,7 +31,7 @@ def build_scrcpy_args(settings: Settings) -> list[str]:
     if settings.crop_mode == "official":
         args += ["--crop", settings.crop_value]
     else:
-        args += [f"--client-crop={settings.crop_value}"]
+        args += ["--client-crop", settings.crop_value]
 
     if sys.platform.startswith("win") and settings.windows_renderer in ("opengl", "direct3d"):
         args += [f"--render-driver={settings.windows_renderer}"]
