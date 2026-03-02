@@ -20,6 +20,10 @@ class Settings:
     crop_value: str = "1600:904:2017:510"  # default
     windows_renderer: str = "direct3d"     # opengl/direct3d
 
+    # Connection
+    connection_mode: str = "usb_only"     # usb_only / usb_wifi
+    wifi_endpoint: str = ""               # ip[:port], used in usb_wifi mode
+
 
 class SettingsStore:
     APP_NAME = "LoginVRCast"

@@ -1,0 +1,70 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  macos-arm64-release:
+    runs-on: macos-14
+    env:
+      MACOS_CERT_B64: ${{ secrets.MACOS_CERT_B64 }}
+      MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+      MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+          python -m pip install pyinstaller
+
+      - name: Build app bundles (USB + USB-WIFI)
+        run: ./scripts/build_macos_arm64.sh
+
+      - name: Optional code signing (if secrets are configured)
+        if: ${{ env.MACOS_CERT_B64 != '' && env.MACOS_CERT_PASSWORD != '' && env.MACOS_SIGN_IDENTITY != '' }}
+        run: |
+          echo "$MACOS_CERT_B64" | base64 --decode > cert.p12
+          security create-keychain -p "" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "" build.keychain
+          security import cert.p12 -k build.keychain -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "" build.keychain
+          codesign --deep --force --options runtime --sign "$MACOS_SIGN_IDENTITY" dist/LoginVRCast-USB.app
+          codesign --deep --force --options runtime --sign "$MACOS_SIGN_IDENTITY" dist/LoginVRCast-USB-WIFI.app
+
+      - name: Optional notarization (if Apple credentials are configured)
+        if: ${{ env.APPLE_ID != '' && env.APPLE_APP_PASSWORD != '' && env.APPLE_TEAM_ID != '' }}
+        run: |
+          ditto -c -k --sequesterRsrc --keepParent dist/LoginVRCast-USB.app dist/LoginVRCast-USB.app.zip
+          ditto -c -k --sequesterRsrc --keepParent dist/LoginVRCast-USB-WIFI.app dist/LoginVRCast-USB-WIFI.app.zip
+          xcrun notarytool submit dist/LoginVRCast-USB.app.zip --apple-id "$APPLE_ID" --password "$APPLE_APP_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
+          xcrun notarytool submit dist/LoginVRCast-USB-WIFI.app.zip --apple-id "$APPLE_ID" --password "$APPLE_APP_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
+          xcrun stapler staple dist/LoginVRCast-USB.app
+          xcrun stapler staple dist/LoginVRCast-USB-WIFI.app
+
+      - name: Package release artifacts
+        run: |
+          ditto -c -k --sequesterRsrc --keepParent dist/LoginVRCast-USB.app dist/LoginVRCast-USB-macos-arm64.zip
+          ditto -c -k --sequesterRsrc --keepParent dist/LoginVRCast-USB-WIFI.app dist/LoginVRCast-USB-WIFI-macos-arm64.zip
+
+      - name: Publish GitHub Release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/LoginVRCast-USB-macos-arm64.zip
+            dist/LoginVRCast-USB-WIFI-macos-arm64.zip
+          generate_release_notes: true
