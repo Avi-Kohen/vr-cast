@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from loginvrcast.core.state import DeviceInfo
-from loginvrcast.core.wifi_runtime import build_wifi_plan, execute_wifi_plan
+from loginvrcast.core.wifi_runtime import apply_manual_connect_policy, build_wifi_plan, execute_wifi_plan
 
 
 def test_plan_disabled_feature_returns_no_actions():
@@ -139,3 +139,23 @@ def test_execute_wifi_plan_handles_connect_failure():
     )
 
     assert "connect failed" in result.status
+
+
+def test_manual_connect_policy_blocks_auto_connect_when_not_requested():
+    should_execute, status = apply_manual_connect_policy(
+        manual_connect_requested=False,
+        plan_status="Wi-Fi: trying 192.168.1.2:5555",
+        target="192.168.1.2:5555",
+    )
+    assert should_execute is False
+    assert "press Connect Wi-Fi now" in status
+
+
+def test_manual_connect_policy_allows_when_requested():
+    should_execute, status = apply_manual_connect_policy(
+        manual_connect_requested=True,
+        plan_status="Wi-Fi: trying 192.168.1.2:5555",
+        target="192.168.1.2:5555",
+    )
+    assert should_execute is True
+    assert "trying" in status

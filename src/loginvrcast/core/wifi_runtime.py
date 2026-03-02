@@ -106,3 +106,16 @@ def execute_wifi_plan(
             status = f"Wi-Fi: connect failed ({e})"
 
     return WifiExecutionResult(status=status, tcpip_attempt_s=tcpip_attempt_s, connect_attempt_s=connect_attempt_s)
+
+
+def apply_manual_connect_policy(*, manual_connect_requested: bool, plan_status: str, target: str) -> tuple[bool, str]:
+    if not target:
+        return False, plan_status
+
+    if manual_connect_requested:
+        return True, plan_status
+
+    if "connected to" in plan_status:
+        return False, plan_status
+
+    return False, f"Wi-Fi: ready ({target}) — press Connect Wi-Fi now"

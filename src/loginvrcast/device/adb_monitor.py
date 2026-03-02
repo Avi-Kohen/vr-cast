@@ -8,7 +8,7 @@ from PySide6.QtCore import QObject, QTimer, Signal, QRunnable, QThreadPool
 
 from loginvrcast.core.settings_store import SettingsStore
 from loginvrcast.core.wifi import parse_wifi_endpoint, extract_ipv4
-from loginvrcast.core.wifi_runtime import build_wifi_plan, execute_wifi_plan
+from loginvrcast.core.wifi_runtime import build_wifi_plan, execute_wifi_plan, apply_manual_connect_policy
 from loginvrcast.core.state import DeviceInfo, AdbStatus
 from loginvrcast.tools.adb_locator import find_adb
 from loginvrcast.tools.subprocess_utils import run_quiet
@@ -96,6 +96,7 @@ class AdbMonitor(QObject):
         self._last_tcpip_attempt = 0.0
         self._last_connect_attempt = 0.0
         self._wifi_status = ""
+        self._manual_connect_requested = False
 
     def start(self) -> None:
         self.refresh()
@@ -173,6 +174,7 @@ class AdbMonitor(QObject):
         if not adb or not adb.ok or not adb.adb_path:
             self._set_wifi_status("Wi-Fi: ADB not ready")
             return
+        self._manual_connect_requested = True
         self._last_connect_attempt = 0.0
         self._last_tcpip_attempt = 0.0
         self._maybe_prepare_wifi(adb.adb_path)
@@ -191,6 +193,7 @@ class AdbMonitor(QObject):
             self._set_wifi_status("Wi-Fi: set endpoint or connect USB once for auto-detect")
             return
 
+        self._manual_connect_requested = False
         try:
             cp = run_quiet([adb.adb_path, "disconnect", f"{host}:{port}"], timeout=3)
             out = (cp.stdout or "").strip()
@@ -288,7 +291,13 @@ class AdbMonitor(QObject):
             return
 
         self._set_wifi_status(f"Wi-Fi: auto endpoint {endpoint}" if auto_detected and endpoint else plan.status)
-        if not plan.target:
+        should_execute, gated_status = apply_manual_connect_policy(
+            manual_connect_requested=self._manual_connect_requested,
+            plan_status=plan.status,
+            target=plan.target,
+        )
+        self._set_wifi_status(gated_status)
+        if not should_execute:
             return
 
         result = execute_wifi_plan(
@@ -302,6 +311,7 @@ class AdbMonitor(QObject):
             run_cmd=lambda cmd: (run_quiet(cmd, timeout=3).stdout or "").strip(),
         )
 
+        self._manual_connect_requested = False
         self._last_tcpip_attempt = result.tcpip_attempt_s
         self._last_connect_attempt = result.connect_attempt_s
         self._set_wifi_status(result.status)

@@ -20,7 +20,7 @@ A simple GUI wrapper around scrcpy for casting a Meta Quest headset.
 ## Connection modes
 In **Advanced → Connection mode**:
 - **USB only**: classic behavior, no Wi-Fi connection attempts.
-- **USB + Wi-Fi**: app can run `adb tcpip` (when USB device is present) and periodically run `adb connect <ip:port>`.
+- **USB + Wi-Fi**: app prepares Wi-Fi connection details, but only attempts `adb tcpip` / `adb connect` after you click **Connect Wi-Fi now**.
 
 When using USB + Wi-Fi, set **Wi-Fi endpoint** (example: `192.168.1.50:5555`).
 If endpoint is empty, the app now tries to auto-detect headset Wi-Fi IP from a USB-connected device.
@@ -89,7 +89,7 @@ LOGINVRCAST_WIFI_ENABLED=1 python -m loginvrcast
 Checks:
 - Advanced shows **USB only** and **USB + Wi-Fi**
 - Wi-Fi endpoint input is visible in USB + Wi-Fi mode (or leave empty for auto-detect)
-- Click **Connect Wi-Fi now** to force immediate connect attempt
+- Click **Connect Wi-Fi now** to run `adb tcpip`/`adb connect` once (manual only; no auto-connect loop)
 - Click **Disconnect Wi-Fi** to disconnect the configured endpoint
 - Wi-Fi status label shows recent operation results
 - With endpoint set, device can appear as `<ip>:<port>` after `adb connect`
