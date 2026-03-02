@@ -99,6 +99,9 @@ pytest -q
 python -m py_compile src/loginvrcast/**/*.py
 ```
 
+## CI
+- GitHub Actions workflow runs unit tests and compile checks on push/PR (`.github/workflows/ci.yml`).
+
 ## Troubleshooting
 - Red “ADB not found”: set platform-tools folder in Advanced
 - Yellow “Unauthorized”: approve USB debugging prompt in headset

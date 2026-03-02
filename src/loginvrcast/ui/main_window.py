@@ -25,6 +25,7 @@ from loginvrcast.core.state import AdbStatus, DeviceInfo, Light
 from loginvrcast.device.adb_monitor import AdbMonitor
 from loginvrcast.tools.adb_locator import validate_platform_tools_dir
 from loginvrcast.core.wifi import validate_wifi_endpoint
+from loginvrcast.core.ui_state import wifi_controls_visible
 from loginvrcast.ui.widgets import TrafficLight
 
 
@@ -171,7 +172,10 @@ class MainWindow(QMainWindow):
         self.scrcpy.error.connect(self._on_cast_error)
 
     def _sync_wifi_controls(self) -> None:
-        wifi_mode = self.connection_mode_combo.currentData() == "usb_wifi" and self.wifi_enabled
+        wifi_mode = wifi_controls_visible(
+            wifi_enabled=self.wifi_enabled,
+            connection_mode=self.connection_mode_combo.currentData() or "usb_only",
+        )
         self.wifi_endpoint_edit.setVisible(wifi_mode)
         self.wifi_help_label.setVisible(wifi_mode)
         self.wifi_connect_btn.setVisible(wifi_mode)

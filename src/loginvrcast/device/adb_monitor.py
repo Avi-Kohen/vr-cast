@@ -7,7 +7,7 @@ from PySide6.QtCore import QObject, QTimer, Signal, QRunnable, QThreadPool
 
 from loginvrcast.core.settings_store import SettingsStore
 from loginvrcast.core.wifi import parse_wifi_endpoint
-from loginvrcast.core.wifi_runtime import build_wifi_plan
+from loginvrcast.core.wifi_runtime import build_wifi_plan, execute_wifi_plan
 from loginvrcast.core.state import DeviceInfo, AdbStatus
 from loginvrcast.tools.adb_locator import find_adb
 from loginvrcast.tools.subprocess_utils import run_quiet
@@ -250,25 +250,20 @@ class AdbMonitor(QObject):
         if not plan.target:
             return
 
-        if plan.should_tcpip:
-            usb_ready = next((d for d in devices if d.adb_state == "device" and ":" not in d.serial), None)
-            if usb_ready:
-                self._last_tcpip_attempt = now
-                try:
-                    _, port = parse_wifi_endpoint(settings.wifi_endpoint.strip())
-                    run_quiet([adb_path, "-s", usb_ready.serial, "tcpip", str(port)], timeout=3)
-                    self._set_wifi_status(f"Wi-Fi: enabled tcpip:{port} via USB")
-                except Exception as e:
-                    self._set_wifi_status(f"Wi-Fi: tcpip failed ({e})")
+        result = execute_wifi_plan(
+            plan=plan,
+            adb_path=adb_path,
+            endpoint=settings.wifi_endpoint.strip(),
+            devices=devices,
+            now_s=now,
+            last_tcpip_attempt_s=self._last_tcpip_attempt,
+            last_connect_attempt_s=self._last_connect_attempt,
+            run_cmd=lambda cmd: (run_quiet(cmd, timeout=3).stdout or "").strip(),
+        )
 
-        if plan.should_connect:
-            self._last_connect_attempt = now
-            try:
-                cp = run_quiet([adb_path, "connect", plan.target], timeout=3)
-                out = (cp.stdout or "").strip()
-                self._set_wifi_status(f"Wi-Fi: {out or 'connect attempted'}")
-            except Exception as e:
-                self._set_wifi_status(f"Wi-Fi: connect failed ({e})")
+        self._last_tcpip_attempt = result.tcpip_attempt_s
+        self._last_connect_attempt = result.connect_attempt_s
+        self._set_wifi_status(result.status)
 
 
     def set_selected_serial(self, serial: str | None) -> None:
