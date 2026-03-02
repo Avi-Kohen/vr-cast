@@ -67,6 +67,27 @@ Outputs:
 - `dist/LoginVRCast-USB.app`
 - `dist/LoginVRCast-USB-WIFI.app`
 
+### 4) Build all Windows x64 variants (onefile + onedir)
+From Windows (PowerShell or Git Bash), build all four outputs by default:
+
+```bash
+./scripts/build_windows_x64.sh
+```
+
+This creates:
+- `LoginVRCast-USB-onedir`
+- `LoginVRCast-USB-onefile`
+- `LoginVRCast-USB-WIFI-onedir`
+- `LoginVRCast-USB-WIFI-onefile`
+
+Optional filters (PowerShell):
+- `-UsbOnly` or `-UsbWifi`
+- `-OneFile` or `-OneDir`
+
+```powershell
+./scripts/build_windows_x64.ps1 -UsbOnly -OneFile
+```
+
 ## Requirements
 ### 1) Quest headset
 - Enable Developer Mode + USB debugging

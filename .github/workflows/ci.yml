@@ -26,10 +26,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Validate build scripts set expected feature flags
+      - name: Validate build scripts and runtime hook wiring
         run: |
+          test -f scripts/build_windows_x64.ps1
+          test -f scripts/build_windows_x64.sh
           grep -q 'pyi_runtime_wifi_off.py' scripts/build_usb_only.sh
           grep -q 'pyi_runtime_wifi_on.py' scripts/build_usb_wifi.sh
+          grep -q 'pyi_runtime_wifi_off.py' scripts/build_windows_x64.ps1
+          grep -q 'pyi_runtime_wifi_on.py' scripts/build_windows_x64.ps1
 
 
   macos-arm64-artifacts:
