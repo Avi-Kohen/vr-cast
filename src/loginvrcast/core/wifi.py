@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 
 _HOST_PATTERN = re.compile(r"^[a-zA-Z0-9.-]+$")
+_IPV4_PATTERN = re.compile(r"\b((?:25[0-5]|2[0-4]\d|1?\d?\d)(?:\.(?:25[0-5]|2[0-4]\d|1?\d?\d)){3})\b")
 
 
 def parse_wifi_endpoint(raw: str) -> tuple[str, int]:
@@ -33,3 +34,10 @@ def validate_wifi_endpoint(raw: str) -> tuple[bool, str]:
         return False, "Port must be between 1 and 65535."
 
     return True, ""
+
+
+def extract_ipv4(text: str) -> str | None:
+    match = _IPV4_PATTERN.search(text)
+    if not match:
+        return None
+    return match.group(1)

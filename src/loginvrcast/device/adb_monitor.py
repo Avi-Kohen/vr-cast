@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import re
 import time
 from dataclasses import replace
 
 from PySide6.QtCore import QObject, QTimer, Signal, QRunnable, QThreadPool
 
 from loginvrcast.core.settings_store import SettingsStore
-from loginvrcast.core.wifi import parse_wifi_endpoint
+from loginvrcast.core.wifi import parse_wifi_endpoint, extract_ipv4
 from loginvrcast.core.wifi_runtime import build_wifi_plan, execute_wifi_plan
 from loginvrcast.core.state import DeviceInfo, AdbStatus
 from loginvrcast.tools.adb_locator import find_adb
@@ -184,9 +185,10 @@ class AdbMonitor(QObject):
             self._set_wifi_status("Wi-Fi: ADB not ready")
             return
 
-        host, port = parse_wifi_endpoint(settings.wifi_endpoint.strip())
+        endpoint, _ = self._effective_wifi_endpoint(adb.adb_path, settings.wifi_endpoint.strip(), self._devices)
+        host, port = parse_wifi_endpoint(endpoint)
         if not host:
-            self._set_wifi_status("Wi-Fi: set endpoint (ip[:port])")
+            self._set_wifi_status("Wi-Fi: set endpoint or connect USB once for auto-detect")
             return
 
         try:
@@ -227,15 +229,54 @@ class AdbMonitor(QObject):
 
         self._start_poll(adb.adb_path)
 
+    def _discover_usb_wifi_endpoint(self, adb_path: str, devices: list[DeviceInfo]) -> str:
+        usb_ready = next((d for d in devices if d.adb_state == "device" and ":" not in d.serial), None)
+        if not usb_ready:
+            return ""
+
+        try:
+            cp = run_quiet([adb_path, "-s", usb_ready.serial, "shell", "ip", "route"], timeout=3)
+            route_text = cp.stdout or ""
+            src_match = re.search(r"src\s+((?:25[0-5]|2[0-4]\d|1?\d?\d)(?:\.(?:25[0-5]|2[0-4]\d|1?\d?\d)){3})", route_text)
+            ip = src_match.group(1) if src_match else extract_ipv4(route_text)
+            if ip:
+                return f"{ip}:5555"
+        except Exception:
+            pass
+
+        try:
+            cp = run_quiet(
+                [adb_path, "-s", usb_ready.serial, "shell", "getprop", "dhcp.wlan0.ipaddress"],
+                timeout=3,
+            )
+            ip = extract_ipv4((cp.stdout or "").strip())
+            if ip:
+                return f"{ip}:5555"
+        except Exception:
+            pass
+
+        return ""
+
+    def _effective_wifi_endpoint(self, adb_path: str, settings_endpoint: str, devices: list[DeviceInfo]) -> tuple[str, bool]:
+        endpoint = settings_endpoint.strip()
+        if endpoint:
+            return endpoint, False
+
+        discovered = self._discover_usb_wifi_endpoint(adb_path, devices)
+        if discovered:
+            return discovered, True
+        return "", True
+
     def _maybe_prepare_wifi(self, adb_path: str) -> None:
         settings = self._settings_store.settings
         now = time.monotonic()
         devices = self._run_devices(adb_path)
+        endpoint, auto_detected = self._effective_wifi_endpoint(adb_path, settings.wifi_endpoint.strip(), devices)
 
         plan = build_wifi_plan(
             wifi_enabled=self._wifi_enabled,
             connection_mode=settings.connection_mode,
-            endpoint=settings.wifi_endpoint.strip(),
+            endpoint=endpoint,
             devices=devices,
             now_s=now,
             last_tcpip_attempt_s=self._last_tcpip_attempt,
@@ -246,14 +287,14 @@ class AdbMonitor(QObject):
             self._set_wifi_status("")
             return
 
-        self._set_wifi_status(plan.status)
+        self._set_wifi_status(f"Wi-Fi: auto endpoint {endpoint}" if auto_detected and endpoint else plan.status)
         if not plan.target:
             return
 
         result = execute_wifi_plan(
             plan=plan,
             adb_path=adb_path,
-            endpoint=settings.wifi_endpoint.strip(),
+            endpoint=endpoint,
             devices=devices,
             now_s=now,
             last_tcpip_attempt_s=self._last_tcpip_attempt,

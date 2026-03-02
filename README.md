@@ -23,6 +23,7 @@ In **Advanced → Connection mode**:
 - **USB + Wi-Fi**: app can run `adb tcpip` (when USB device is present) and periodically run `adb connect <ip:port>`.
 
 When using USB + Wi-Fi, set **Wi-Fi endpoint** (example: `192.168.1.50:5555`).
+If endpoint is empty, the app now tries to auto-detect headset Wi-Fi IP from a USB-connected device.
 
 ## Build two distributions from one project
 You can create two dist variants from the same codebase:
@@ -87,7 +88,7 @@ LOGINVRCAST_WIFI_ENABLED=1 python -m loginvrcast
 ```
 Checks:
 - Advanced shows **USB only** and **USB + Wi-Fi**
-- Wi-Fi endpoint input is visible in USB + Wi-Fi mode
+- Wi-Fi endpoint input is visible in USB + Wi-Fi mode (or leave empty for auto-detect)
 - Click **Connect Wi-Fi now** to force immediate connect attempt
 - Click **Disconnect Wi-Fi** to disconnect the configured endpoint
 - Wi-Fi status label shows recent operation results
