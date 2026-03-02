@@ -3,38 +3,53 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from PySide6.QtWidgets import (
-    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QComboBox,
-    QGroupBox, QFormLayout, QFileDialog, QMessageBox
-)
 from PySide6.QtCore import Qt
+from PySide6.QtWidgets import (
+    QComboBox,
+    QFileDialog,
+    QFormLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMainWindow,
+    QMessageBox,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)
 
-from loginvrcast.core.settings_store import SettingsStore
-from loginvrcast.core.state import Light, DeviceInfo, AdbStatus
-from loginvrcast.tools.adb_locator import validate_platform_tools_dir, adb_filename
-from loginvrcast.ui.widgets import TrafficLight
 from loginvrcast.casting.scrcpy_manager import ScrcpyManager
+from loginvrcast.core.settings_store import SettingsStore
+from loginvrcast.core.state import AdbStatus, DeviceInfo, Light
 from loginvrcast.device.adb_monitor import AdbMonitor
+from loginvrcast.tools.adb_locator import validate_platform_tools_dir
+from loginvrcast.ui.widgets import TrafficLight
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, settings_store: SettingsStore, adb_monitor: AdbMonitor, scrcpy_manager: ScrcpyManager):
+    def __init__(
+        self,
+        settings_store: SettingsStore,
+        adb_monitor: AdbMonitor,
+        scrcpy_manager: ScrcpyManager,
+        wifi_enabled: bool,
+    ):
         super().__init__()
         self.setWindowTitle("LoginVRCast")
 
         self.settings_store = settings_store
         self.monitor = adb_monitor
         self.scrcpy = scrcpy_manager
+        self.wifi_enabled = wifi_enabled
 
         self._adb_status: AdbStatus | None = None
         self._devices: list[DeviceInfo] = []
 
-        # UI
         root = QWidget()
         self.setCentralWidget(root)
         main = QVBoxLayout(root)
 
-        # Device picker row
         row1 = QHBoxLayout()
         row1.addWidget(QLabel("Device:"))
         self.device_combo = QComboBox()
@@ -42,7 +57,6 @@ class MainWindow(QMainWindow):
         row1.addWidget(self.device_combo, 1)
         main.addLayout(row1)
 
-        # Status row (traffic light + text)
         row2 = QHBoxLayout()
         self.light = TrafficLight()
         row2.addWidget(self.light)
@@ -55,19 +69,16 @@ class MainWindow(QMainWindow):
         self.details_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
         main.addWidget(self.details_label)
 
-        # Start/Stop button
         self.toggle_btn = QPushButton("Start Casting")
         self.toggle_btn.clicked.connect(self._on_toggle)
         self.toggle_btn.setEnabled(False)
         main.addWidget(self.toggle_btn)
 
-        # Advanced
         adv = QGroupBox("Advanced")
         adv.setCheckable(True)
         adv.setChecked(False)
         adv_layout = QFormLayout(adv)
 
-        # Browse platform-tools
         self.adb_label = QLabel("ADB: (auto)")
         self.browse_btn = QPushButton("Browse platform-tools folder…")
         self.browse_btn.clicked.connect(self._browse_platform_tools)
@@ -78,27 +89,39 @@ class MainWindow(QMainWindow):
         adb_row_widget.setLayout(adb_row)
         adv_layout.addRow("ADB", adb_row_widget)
 
-        # Quality preset
+        self.connection_mode_combo = QComboBox()
+        self.connection_mode_combo.addItem("USB only", "usb_only")
+        if self.wifi_enabled:
+            self.connection_mode_combo.addItem("USB + Wi-Fi", "usb_wifi")
+        else:
+            self.settings_store.settings.connection_mode = "usb_only"
+        idx = self.connection_mode_combo.findData(self.settings_store.settings.connection_mode)
+        self.connection_mode_combo.setCurrentIndex(idx if idx != -1 else 0)
+        self.connection_mode_combo.currentIndexChanged.connect(self._on_settings_changed)
+        adv_layout.addRow("Connection mode", self.connection_mode_combo)
+
+        self.wifi_endpoint_edit = QLineEdit(self.settings_store.settings.wifi_endpoint)
+        self.wifi_endpoint_edit.setPlaceholderText("192.168.1.50:5555")
+        self.wifi_endpoint_edit.editingFinished.connect(self._on_settings_changed)
+        self.wifi_help_label = QLabel("Needs USB once to enable adb tcpip, then can reconnect by IP.")
+        self.wifi_help_label.setWordWrap(True)
+        adv_layout.addRow("Wi-Fi endpoint", self.wifi_endpoint_edit)
+        adv_layout.addRow("", self.wifi_help_label)
+
         self.quality_combo = QComboBox()
         self.quality_combo.addItems(["Low", "Normal", "High"])
         self.quality_combo.setCurrentText(self.settings_store.settings.quality_preset)
         self.quality_combo.currentTextChanged.connect(self._on_settings_changed)
         adv_layout.addRow("Quality", self.quality_combo)
 
-        # Crop mode
-        # Crop mode (replace your current addItems(["official","client"]) block)
         self.crop_mode_combo = QComboBox()
         self.crop_mode_combo.addItem("Official crop (--crop)", "official")
         self.crop_mode_combo.addItem("Client crop (--client-crop)", "client")
-
-        # set current from settings
         idx = self.crop_mode_combo.findData(self.settings_store.settings.crop_mode)
         self.crop_mode_combo.setCurrentIndex(idx if idx != -1 else 0)
-
         self.crop_mode_combo.currentIndexChanged.connect(self._on_settings_changed)
         adv_layout.addRow("Crop mode", self.crop_mode_combo)
 
-        # Crop preset
         self.crop_combo = QComboBox()
         self.crop_combo.addItems([
             "1600:904:2017:510",
@@ -110,7 +133,6 @@ class MainWindow(QMainWindow):
         self.crop_combo.currentTextChanged.connect(self._on_settings_changed)
         adv_layout.addRow("Crop", self.crop_combo)
 
-        # Windows-only renderer
         self.renderer_combo = QComboBox()
         self.renderer_combo.addItems(["direct3d", "opengl"])
         self.renderer_combo.setCurrentText(self.settings_store.settings.windows_renderer)
@@ -122,23 +144,35 @@ class MainWindow(QMainWindow):
 
         main.addWidget(adv)
 
-        # Wire signals
+        self._sync_wifi_controls()
+
         self.monitor.adb_status_changed.connect(self._on_adb_status)
         self.monitor.devices_changed.connect(self._on_devices_changed)
         self.scrcpy.started.connect(self._on_cast_started)
         self.scrcpy.stopped.connect(self._on_cast_stopped)
         self.scrcpy.error.connect(self._on_cast_error)
 
-    # ---------- UI event handlers ----------
+    def _sync_wifi_controls(self) -> None:
+        wifi_mode = self.connection_mode_combo.currentData() == "usb_wifi" and self.wifi_enabled
+        self.wifi_endpoint_edit.setVisible(wifi_mode)
+        self.wifi_help_label.setVisible(wifi_mode)
 
     def _on_settings_changed(self, *_):
         s = self.settings_store.settings
+        s.connection_mode = self.connection_mode_combo.currentData() or "usb_only"
+        if not self.wifi_enabled:
+            s.connection_mode = "usb_only"
+            s.wifi_endpoint = ""
+        else:
+            s.wifi_endpoint = self.wifi_endpoint_edit.text().strip()
         s.quality_preset = self.quality_combo.currentText()
         s.crop_mode = self.crop_mode_combo.currentData()
         s.crop_value = self.crop_combo.currentText()
         if sys.platform.startswith("win"):
             s.windows_renderer = self.renderer_combo.currentText()
         self.settings_store.save()
+        self._sync_wifi_controls()
+        self.monitor.refresh()
 
     def _browse_platform_tools(self):
         folder = QFileDialog.getExistingDirectory(self, "Select platform-tools folder")
@@ -152,14 +186,13 @@ class MainWindow(QMainWindow):
 
         self.settings_store.settings.platform_tools_dir = str(p)
         self.settings_store.save()
-        self.monitor.refresh()  # immediate refresh
+        self.monitor.refresh()
 
     def _on_device_selected(self, idx: int):
         if idx < 0 or idx >= len(self._devices):
             self.monitor.set_selected_serial(None)
             return
-        serial = self._devices[idx].serial
-        self.monitor.set_selected_serial(serial)
+        self.monitor.set_selected_serial(self._devices[idx].serial)
 
     def _on_toggle(self):
         if self.scrcpy.is_running():
@@ -170,13 +203,10 @@ class MainWindow(QMainWindow):
             return
 
         selected = self.monitor.selected_serial()
-        # allow start only if green-ready
         if self._selected_light() != Light.GREEN:
             return
 
         self.scrcpy.start(adb_path=self._adb_status.adb_path, serial=selected)
-
-    # ---------- Signal handlers ----------
 
     def _on_adb_status(self, status: AdbStatus):
         self._adb_status = status
@@ -201,8 +231,6 @@ class MainWindow(QMainWindow):
         self.toggle_btn.setText("Start Casting")
         self._render_state()
 
-    # ---------- Rendering ----------
-
     def _update_device_combo(self):
         self.device_combo.blockSignals(True)
         self.device_combo.clear()
@@ -211,7 +239,6 @@ class MainWindow(QMainWindow):
             self.device_combo.addItem(f"{name} — {d.serial} — {d.adb_state}")
         self.device_combo.blockSignals(False)
 
-        # Default to first detected device
         if self._devices:
             self.device_combo.setCurrentIndex(0)
         else:
@@ -236,7 +263,6 @@ class MainWindow(QMainWindow):
         return Light.RED
 
     def _render_state(self):
-        # If casting is running, keep Stop enabled; monitor continues in background
         if self.scrcpy.is_running():
             self.light.set_light(self._selected_light())
             self.status_label.setText("Casting running…")
@@ -257,7 +283,11 @@ class MainWindow(QMainWindow):
 
         d = self._selected_device()
         if not d:
-            self.status_label.setText("No device connected.")
+            mode = self.connection_mode_combo.currentData()
+            if mode == "usb_wifi" and self.wifi_enabled:
+                self.status_label.setText("No device connected. Connect USB once and set Wi-Fi endpoint.")
+            else:
+                self.status_label.setText("No device connected.")
             self.details_label.setText("")
             self.toggle_btn.setEnabled(False)
             self.toggle_btn.setText("Start Casting")

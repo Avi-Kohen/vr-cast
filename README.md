@@ -1,21 +1,53 @@
-# LoginVRCast (USB-only)
+# LoginVRCast (USB + optional Wi-Fi)
 
-A simple GUI wrapper around scrcpy for casting a Meta Quest headset over **USB**.
+A simple GUI wrapper around scrcpy for casting a Meta Quest headset.
 
-## Features (v1)
+## Features
 - Windows + macOS (Apple Silicon)
-- **USB only** (no Wi-Fi)
-- **Read-only** casting (`--no-control`)
-- **PC audio always off** (`--no-audio`)
-- Traffic-light headset status:
-  - Red = not connected / ADB missing
-  - Yellow = unauthorized
-  - Green = ready
+- USB casting
+- Optional USB + Wi-Fi workflow (`adb tcpip` + `adb connect`)
+- Read-only casting (`--no-control`)
+- PC audio off (`--no-audio`)
+- Traffic-light headset status
 - Presets: Low / Normal / High
 - Crop modes:
   - Official crop (`--crop w:h:x:y`)
-  - Client crop (custom: `--client-crop=w:h:x:y`)
-- Windows only: renderer toggle OpenGL / Direct3D (`--render-driver`)
+  - Client crop (`--client-crop=w:h:x:y`)
+- Windows-only renderer toggle (`--render-driver`)
+
+## Connection modes
+In **Advanced → Connection mode**:
+- **USB only**: classic behavior, no Wi-Fi connection attempts.
+- **USB + Wi-Fi**: app can run `adb tcpip` (when USB device is present) and periodically run `adb connect <ip:port>`.
+
+When using USB + Wi-Fi, set **Wi-Fi endpoint** (example: `192.168.1.50:5555`).
+
+## Build two distributions from one project
+You can create two dist variants from the same codebase:
+
+### 1) USB-only dist
+Disable Wi-Fi feature at runtime/build time:
+
+```bash
+LOGINVRCAST_WIFI_ENABLED=0 pyinstaller ...
+```
+
+Result:
+- UI only shows USB mode
+- Settings are forced to USB only
+- App does not run `adb tcpip` or `adb connect`
+
+### 2) USB + Wi-Fi dist
+Use default (or explicitly enable):
+
+```bash
+LOGINVRCAST_WIFI_ENABLED=1 pyinstaller ...
+```
+
+Result:
+- UI shows both modes
+- Wi-Fi endpoint field is available
+- App can prepare and connect over Wi-Fi
 
 ## Requirements
 ### 1) Quest headset
@@ -24,27 +56,17 @@ A simple GUI wrapper around scrcpy for casting a Meta Quest headset over **USB**
 
 ### 2) ADB (platform-tools) – user supplied
 This app does **not** ship platform-tools.
-You have 2 options:
-- **Offline**: place a `platform-tools/` folder next to the app
-- **Online**: download platform-tools and select the folder in Advanced → “Browse platform-tools folder…”
+
+Options:
+- Place `platform-tools/` folder next to the app
+- Or choose it in Advanced → “Browse platform-tools folder…”
 
 Windows platform-tools folder must contain:
-- adb.exe
-- AdbWinApi.dll
-- AdbWinUsbApi.dll
-
-## Usage
-1) Connect Quest via USB
-2) Approve USB debugging inside the headset
-3) Status turns Green → click **Start Casting**
-4) Click **Stop Casting** to stop (monitor continues)
-
-## Default settings
-- Quality preset: Low
-- Crop mode: Official
-- Default crop: 1600:904:2017:510
+- `adb.exe`
+- `AdbWinApi.dll`
+- `AdbWinUsbApi.dll`
 
 ## Troubleshooting
 - Red “ADB not found”: set platform-tools folder in Advanced
 - Yellow “Unauthorized”: approve USB debugging prompt in headset
-- Client crop black screen: (fixed in v1) client crop ignores max-size to avoid out-of-bounds crop
+- No device in USB + Wi-Fi mode: connect USB once and verify Wi-Fi endpoint
