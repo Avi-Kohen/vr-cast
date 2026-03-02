@@ -7,6 +7,7 @@ from PySide6.QtCore import QObject, QTimer, Signal, QRunnable, QThreadPool
 
 from loginvrcast.core.settings_store import SettingsStore
 from loginvrcast.core.wifi import parse_wifi_endpoint
+from loginvrcast.core.wifi_runtime import build_wifi_plan
 from loginvrcast.core.state import DeviceInfo, AdbStatus
 from loginvrcast.tools.adb_locator import find_adb
 from loginvrcast.tools.subprocess_utils import run_quiet
@@ -176,6 +177,25 @@ class AdbMonitor(QObject):
         self._maybe_prepare_wifi(adb.adb_path)
         self.refresh()
 
+    def disconnect_wifi_now(self) -> None:
+        adb = self._adb
+        settings = self._settings_store.settings
+        if not adb or not adb.ok or not adb.adb_path:
+            self._set_wifi_status("Wi-Fi: ADB not ready")
+            return
+
+        host, port = parse_wifi_endpoint(settings.wifi_endpoint.strip())
+        if not host:
+            self._set_wifi_status("Wi-Fi: set endpoint (ip[:port])")
+            return
+
+        try:
+            cp = run_quiet([adb.adb_path, "disconnect", f"{host}:{port}"], timeout=3)
+            out = (cp.stdout or "").strip()
+            self._set_wifi_status(f"Wi-Fi: {out or 'disconnected'}")
+        except Exception as e:
+            self._set_wifi_status(f"Wi-Fi: disconnect failed ({e})")
+
     def refresh(self) -> None:
         app_dir = app_dir_for_user_files()
         adb = find_adb(self._settings_store.settings.platform_tools_dir, app_dir)
@@ -209,40 +229,42 @@ class AdbMonitor(QObject):
 
     def _maybe_prepare_wifi(self, adb_path: str) -> None:
         settings = self._settings_store.settings
-        if not self._wifi_enabled or settings.connection_mode != "usb_wifi":
-            self._set_wifi_status("")
-            return
-
-        endpoint = settings.wifi_endpoint.strip()
-        if not endpoint:
-            self._set_wifi_status("Wi-Fi: set endpoint (ip[:port])")
-            return
-
-        host, port = parse_wifi_endpoint(endpoint)
-        if not host:
-            self._set_wifi_status("Wi-Fi: invalid endpoint")
-            return
-
         now = time.monotonic()
         devices = self._run_devices(adb_path)
 
-        if any(d.serial == f"{host}:{port}" and d.adb_state == "device" for d in devices):
-            self._set_wifi_status(f"Wi-Fi: connected to {host}:{port}")
+        plan = build_wifi_plan(
+            wifi_enabled=self._wifi_enabled,
+            connection_mode=settings.connection_mode,
+            endpoint=settings.wifi_endpoint.strip(),
+            devices=devices,
+            now_s=now,
+            last_tcpip_attempt_s=self._last_tcpip_attempt,
+            last_connect_attempt_s=self._last_connect_attempt,
+        )
+
+        if not plan.status:
+            self._set_wifi_status("")
             return
 
-        usb_ready = [d for d in devices if d.adb_state == "device" and ":" not in d.serial]
-        if usb_ready and now - self._last_tcpip_attempt > 30:
-            self._last_tcpip_attempt = now
-            try:
-                run_quiet([adb_path, "-s", usb_ready[0].serial, "tcpip", str(port)], timeout=3)
-                self._set_wifi_status(f"Wi-Fi: enabled tcpip:{port} via USB")
-            except Exception as e:
-                self._set_wifi_status(f"Wi-Fi: tcpip failed ({e})")
+        self._set_wifi_status(plan.status)
+        if not plan.target:
+            return
 
-        if now - self._last_connect_attempt > 8:
+        if plan.should_tcpip:
+            usb_ready = next((d for d in devices if d.adb_state == "device" and ":" not in d.serial), None)
+            if usb_ready:
+                self._last_tcpip_attempt = now
+                try:
+                    _, port = parse_wifi_endpoint(settings.wifi_endpoint.strip())
+                    run_quiet([adb_path, "-s", usb_ready.serial, "tcpip", str(port)], timeout=3)
+                    self._set_wifi_status(f"Wi-Fi: enabled tcpip:{port} via USB")
+                except Exception as e:
+                    self._set_wifi_status(f"Wi-Fi: tcpip failed ({e})")
+
+        if plan.should_connect:
             self._last_connect_attempt = now
             try:
-                cp = run_quiet([adb_path, "connect", f"{host}:{port}"], timeout=3)
+                cp = run_quiet([adb_path, "connect", plan.target], timeout=3)
                 out = (cp.stdout or "").strip()
                 self._set_wifi_status(f"Wi-Fi: {out or 'connect attempted'}")
             except Exception as e:

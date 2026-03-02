@@ -6,7 +6,7 @@ A simple GUI wrapper around scrcpy for casting a Meta Quest headset.
 - Windows + macOS (Apple Silicon)
 - USB casting
 - Optional USB + Wi-Fi workflow (`adb tcpip` + `adb connect`)
-- Manual **Connect Wi-Fi now** action in Advanced
+- Manual **Connect Wi-Fi now** / **Disconnect Wi-Fi** actions in Advanced
 - Wi-Fi status line (connected / connect attempt / errors)
 - Read-only casting (`--no-control`)
 - PC audio off (`--no-audio`)
@@ -31,7 +31,7 @@ You can create two dist variants from the same codebase:
 Disable Wi-Fi feature at runtime/build time:
 
 ```bash
-LOGINVRCAST_WIFI_ENABLED=0 pyinstaller ...
+./scripts/build_usb_only.sh <your-pyinstaller-args>
 ```
 
 Result:
@@ -43,7 +43,7 @@ Result:
 Use default (or explicitly enable):
 
 ```bash
-LOGINVRCAST_WIFI_ENABLED=1 pyinstaller ...
+./scripts/build_usb_wifi.sh <your-pyinstaller-args>
 ```
 
 Result:
@@ -89,6 +89,7 @@ Checks:
 - Advanced shows **USB only** and **USB + Wi-Fi**
 - Wi-Fi endpoint input is visible in USB + Wi-Fi mode
 - Click **Connect Wi-Fi now** to force immediate connect attempt
+- Click **Disconnect Wi-Fi** to disconnect the configured endpoint
 - Wi-Fi status label shows recent operation results
 - With endpoint set, device can appear as `<ip>:<port>` after `adb connect`
 

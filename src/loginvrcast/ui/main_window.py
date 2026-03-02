@@ -110,9 +110,12 @@ class MainWindow(QMainWindow):
         self.wifi_status_label.setWordWrap(True)
         self.wifi_connect_btn = QPushButton("Connect Wi-Fi now")
         self.wifi_connect_btn.clicked.connect(self._on_connect_wifi_now)
+        self.wifi_disconnect_btn = QPushButton("Disconnect Wi-Fi")
+        self.wifi_disconnect_btn.clicked.connect(self._on_disconnect_wifi_now)
 
         wifi_action_row = QHBoxLayout()
         wifi_action_row.addWidget(self.wifi_connect_btn)
+        wifi_action_row.addWidget(self.wifi_disconnect_btn)
         wifi_action_row.addStretch(1)
         wifi_action_widget = QWidget()
         wifi_action_widget.setLayout(wifi_action_row)
@@ -172,6 +175,7 @@ class MainWindow(QMainWindow):
         self.wifi_endpoint_edit.setVisible(wifi_mode)
         self.wifi_help_label.setVisible(wifi_mode)
         self.wifi_connect_btn.setVisible(wifi_mode)
+        self.wifi_disconnect_btn.setVisible(wifi_mode)
         self.wifi_status_label.setVisible(wifi_mode)
 
     def _on_settings_changed(self, *_):
@@ -251,6 +255,12 @@ class MainWindow(QMainWindow):
             return
         self._on_settings_changed()
         self.monitor.connect_wifi_now()
+
+    def _on_disconnect_wifi_now(self):
+        if not self.wifi_enabled:
+            return
+        self._on_settings_changed()
+        self.monitor.disconnect_wifi_now()
 
     def _on_cast_started(self):
         self.toggle_btn.setText("Stop Casting")
