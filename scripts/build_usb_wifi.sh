@@ -2,5 +2,5 @@
 set -euo pipefail
 
 # Usage: ./scripts/build_usb_wifi.sh [extra pyinstaller args...]
-export LOGINVRCAST_WIFI_ENABLED=1
-pyinstaller "$@"
+# Embeds a runtime hook so frozen app defaults to USB+Wi-Fi when env var is not set.
+pyinstaller --runtime-hook scripts/pyi_runtime_wifi_on.py "$@"

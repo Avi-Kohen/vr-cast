@@ -39,6 +39,7 @@ Result:
 - UI only shows USB mode
 - Settings are forced to USB only
 - App does not run `adb tcpip` or `adb connect`
+- Build embeds USB-only runtime default (Wi-Fi hidden even without env var)
 
 ### 2) USB + Wi-Fi dist
 Use default (or explicitly enable):
@@ -52,6 +53,7 @@ Result:
 - Wi-Fi endpoint field is available
 - App can prepare and connect over Wi-Fi
 - Wi-Fi status + manual connect tools are visible
+- Build embeds Wi-Fi-enabled runtime default
 
 
 ### 3) Build both variants on macOS arm64

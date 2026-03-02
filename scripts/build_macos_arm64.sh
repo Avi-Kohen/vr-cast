@@ -26,10 +26,8 @@ COMMON_ARGS=(
   --add-data "resources:resources"
 )
 
-export LOGINVRCAST_WIFI_ENABLED=0
-pyinstaller "${COMMON_ARGS[@]}" --name "LoginVRCast-USB" "$ENTRYPOINT"
+pyinstaller "${COMMON_ARGS[@]}" --runtime-hook scripts/pyi_runtime_wifi_off.py --name "LoginVRCast-USB" "$ENTRYPOINT"
 
-export LOGINVRCAST_WIFI_ENABLED=1
-pyinstaller "${COMMON_ARGS[@]}" --name "LoginVRCast-USB-WIFI" "$ENTRYPOINT"
+pyinstaller "${COMMON_ARGS[@]}" --runtime-hook scripts/pyi_runtime_wifi_on.py --name "LoginVRCast-USB-WIFI" "$ENTRYPOINT"
 
 echo "Built dist/LoginVRCast-USB.app and dist/LoginVRCast-USB-WIFI.app"

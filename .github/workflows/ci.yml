@@ -28,8 +28,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Validate build scripts set expected feature flags
         run: |
-          grep -q 'LOGINVRCAST_WIFI_ENABLED=0' scripts/build_usb_only.sh
-          grep -q 'LOGINVRCAST_WIFI_ENABLED=1' scripts/build_usb_wifi.sh
+          grep -q 'pyi_runtime_wifi_off.py' scripts/build_usb_only.sh
+          grep -q 'pyi_runtime_wifi_on.py' scripts/build_usb_wifi.sh
 
 
   macos-arm64-artifacts:
