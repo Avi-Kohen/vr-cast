@@ -53,6 +53,18 @@ Result:
 - App can prepare and connect over Wi-Fi
 - Wi-Fi status + manual connect tools are visible
 
+
+### 3) Build both variants on macOS arm64
+On Apple Silicon Mac, this script builds both `.app` bundles with resources included:
+
+```bash
+./scripts/build_macos_arm64.sh
+```
+
+Outputs:
+- `dist/LoginVRCast-USB.app`
+- `dist/LoginVRCast-USB-WIFI.app`
+
 ## Requirements
 ### 1) Quest headset
 - Enable Developer Mode + USB debugging
@@ -100,8 +112,10 @@ pytest -q
 python -m py_compile src/loginvrcast/**/*.py
 ```
 
+
 ## CI
 - GitHub Actions workflow runs unit tests and compile checks on push/PR (`.github/workflows/ci.yml`).
+- CI also builds and uploads macOS arm64 zipped app artifacts for both USB-only and USB+Wi-Fi variants.
 
 ## Troubleshooting
 - Red “ADB not found”: set platform-tools folder in Advanced
