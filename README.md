@@ -66,6 +66,33 @@ Windows platform-tools folder must contain:
 - `AdbWinApi.dll`
 - `AdbWinUsbApi.dll`
 
+
+## Verify it works
+
+### USB-only run
+```bash
+LOGINVRCAST_WIFI_ENABLED=0 python -m loginvrcast
+```
+Checks:
+- Advanced shows only **USB only** mode
+- Casting works over USB
+- No Wi-Fi endpoint UI
+
+### USB + Wi-Fi run
+```bash
+LOGINVRCAST_WIFI_ENABLED=1 python -m loginvrcast
+```
+Checks:
+- Advanced shows **USB only** and **USB + Wi-Fi**
+- Wi-Fi endpoint input is visible in USB + Wi-Fi mode
+- With endpoint set, device can appear as `<ip>:<port>` after `adb connect`
+
+### Automated checks
+```bash
+pytest -q
+python -m py_compile src/loginvrcast/**/*.py
+```
+
 ## Troubleshooting
 - Red “ADB not found”: set platform-tools folder in Advanced
 - Yellow “Unauthorized”: approve USB debugging prompt in headset

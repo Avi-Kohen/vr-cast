@@ -6,6 +6,7 @@ from dataclasses import replace
 from PySide6.QtCore import QObject, QTimer, Signal, QRunnable, QThreadPool
 
 from loginvrcast.core.settings_store import SettingsStore
+from loginvrcast.core.wifi import parse_wifi_endpoint
 from loginvrcast.core.state import DeviceInfo, AdbStatus
 from loginvrcast.tools.adb_locator import find_adb
 from loginvrcast.tools.subprocess_utils import run_quiet
@@ -197,7 +198,7 @@ class AdbMonitor(QObject):
         if not endpoint:
             return
 
-        host, port = self._parse_endpoint(endpoint)
+        host, port = parse_wifi_endpoint(endpoint)
         if not host:
             return
 
@@ -219,21 +220,6 @@ class AdbMonitor(QObject):
             except Exception:
                 pass
 
-    @staticmethod
-    def _parse_endpoint(raw: str) -> tuple[str, int]:
-        cleaned = raw.strip()
-        if not cleaned:
-            return "", 5555
-
-        if ":" not in cleaned:
-            return cleaned, 5555
-
-        host, _, port_s = cleaned.partition(":")
-        try:
-            port = int(port_s)
-        except ValueError:
-            port = 5555
-        return host.strip(), port
 
     def set_selected_serial(self, serial: str | None) -> None:
         self._selected_serial = serial
