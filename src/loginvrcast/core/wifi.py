@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import re
+
+_HOST_PATTERN = re.compile(r"^[a-zA-Z0-9.-]+$")
+
 
 def parse_wifi_endpoint(raw: str) -> tuple[str, int]:
     cleaned = raw.strip()
@@ -15,3 +19,17 @@ def parse_wifi_endpoint(raw: str) -> tuple[str, int]:
     except ValueError:
         port = 5555
     return host.strip(), port
+
+
+def validate_wifi_endpoint(raw: str) -> tuple[bool, str]:
+    host, port = parse_wifi_endpoint(raw)
+    if not host:
+        return False, "Wi-Fi endpoint is required. Use format: ip[:port]"
+
+    if not _HOST_PATTERN.fullmatch(host):
+        return False, "Host contains invalid characters. Use IP or hostname."
+
+    if port < 1 or port > 65535:
+        return False, "Port must be between 1 and 65535."
+
+    return True, ""

@@ -24,6 +24,7 @@ from loginvrcast.core.settings_store import SettingsStore
 from loginvrcast.core.state import AdbStatus, DeviceInfo, Light
 from loginvrcast.device.adb_monitor import AdbMonitor
 from loginvrcast.tools.adb_locator import validate_platform_tools_dir
+from loginvrcast.core.wifi import validate_wifi_endpoint
 from loginvrcast.ui.widgets import TrafficLight
 
 
@@ -105,8 +106,21 @@ class MainWindow(QMainWindow):
         self.wifi_endpoint_edit.editingFinished.connect(self._on_settings_changed)
         self.wifi_help_label = QLabel("Needs USB once to enable adb tcpip, then can reconnect by IP.")
         self.wifi_help_label.setWordWrap(True)
+        self.wifi_status_label = QLabel("")
+        self.wifi_status_label.setWordWrap(True)
+        self.wifi_connect_btn = QPushButton("Connect Wi-Fi now")
+        self.wifi_connect_btn.clicked.connect(self._on_connect_wifi_now)
+
+        wifi_action_row = QHBoxLayout()
+        wifi_action_row.addWidget(self.wifi_connect_btn)
+        wifi_action_row.addStretch(1)
+        wifi_action_widget = QWidget()
+        wifi_action_widget.setLayout(wifi_action_row)
+
         adv_layout.addRow("Wi-Fi endpoint", self.wifi_endpoint_edit)
         adv_layout.addRow("", self.wifi_help_label)
+        adv_layout.addRow("", wifi_action_widget)
+        adv_layout.addRow("", self.wifi_status_label)
 
         self.quality_combo = QComboBox()
         self.quality_combo.addItems(["Low", "Normal", "High"])
@@ -148,6 +162,7 @@ class MainWindow(QMainWindow):
 
         self.monitor.adb_status_changed.connect(self._on_adb_status)
         self.monitor.devices_changed.connect(self._on_devices_changed)
+        self.monitor.wifi_status_changed.connect(self._on_wifi_status_changed)
         self.scrcpy.started.connect(self._on_cast_started)
         self.scrcpy.stopped.connect(self._on_cast_stopped)
         self.scrcpy.error.connect(self._on_cast_error)
@@ -156,6 +171,8 @@ class MainWindow(QMainWindow):
         wifi_mode = self.connection_mode_combo.currentData() == "usb_wifi" and self.wifi_enabled
         self.wifi_endpoint_edit.setVisible(wifi_mode)
         self.wifi_help_label.setVisible(wifi_mode)
+        self.wifi_connect_btn.setVisible(wifi_mode)
+        self.wifi_status_label.setVisible(wifi_mode)
 
     def _on_settings_changed(self, *_):
         s = self.settings_store.settings
@@ -165,6 +182,12 @@ class MainWindow(QMainWindow):
             s.wifi_endpoint = ""
         else:
             s.wifi_endpoint = self.wifi_endpoint_edit.text().strip()
+            if s.connection_mode == "usb_wifi" and s.wifi_endpoint:
+                ok, msg = validate_wifi_endpoint(s.wifi_endpoint)
+                if not ok:
+                    self.wifi_status_label.setText(f"Wi-Fi: {msg}")
+                else:
+                    self.wifi_status_label.setText("")
         s.quality_preset = self.quality_combo.currentText()
         s.crop_mode = self.crop_mode_combo.currentData()
         s.crop_value = self.crop_combo.currentText()
@@ -218,6 +241,17 @@ class MainWindow(QMainWindow):
         self._update_device_combo()
         self._render_state()
 
+
+    def _on_wifi_status_changed(self, msg: str):
+        if self.connection_mode_combo.currentData() == "usb_wifi" and self.wifi_enabled:
+            self.wifi_status_label.setText(msg)
+
+    def _on_connect_wifi_now(self):
+        if not self.wifi_enabled:
+            return
+        self._on_settings_changed()
+        self.monitor.connect_wifi_now()
+
     def _on_cast_started(self):
         self.toggle_btn.setText("Stop Casting")
         self.toggle_btn.setEnabled(True)
@@ -232,17 +266,20 @@ class MainWindow(QMainWindow):
         self._render_state()
 
     def _update_device_combo(self):
+        selected = self.monitor.selected_serial()
+
         self.device_combo.blockSignals(True)
         self.device_combo.clear()
-        for d in self._devices:
+        selected_index = -1
+        for i, d in enumerate(self._devices):
             name = d.model or "Unknown"
             self.device_combo.addItem(f"{name} — {d.serial} — {d.adb_state}")
+            if selected and d.serial == selected:
+                selected_index = i
+        if selected_index == -1 and self._devices:
+            selected_index = 0
+        self.device_combo.setCurrentIndex(selected_index)
         self.device_combo.blockSignals(False)
-
-        if self._devices:
-            self.device_combo.setCurrentIndex(0)
-        else:
-            self.device_combo.setCurrentIndex(-1)
 
     def _selected_device(self) -> DeviceInfo | None:
         idx = self.device_combo.currentIndex()

@@ -69,6 +69,7 @@ class _AdbPollTask(QRunnable):
 class AdbMonitor(QObject):
     devices_changed = Signal(list)
     adb_status_changed = Signal(object)
+    wifi_status_changed = Signal(str)
 
     def __init__(self, settings_store: SettingsStore, wifi_enabled: bool):
         super().__init__()
@@ -92,6 +93,7 @@ class AdbMonitor(QObject):
 
         self._last_tcpip_attempt = 0.0
         self._last_connect_attempt = 0.0
+        self._wifi_status = ""
 
     def start(self) -> None:
         self.refresh()
@@ -158,6 +160,22 @@ class AdbMonitor(QObject):
         if self._poll_pending and self._adb and self._adb.ok and self._adb.adb_path:
             self._start_poll(self._adb.adb_path)
 
+
+    def _set_wifi_status(self, msg: str) -> None:
+        if msg != self._wifi_status:
+            self._wifi_status = msg
+            self.wifi_status_changed.emit(msg)
+
+    def connect_wifi_now(self) -> None:
+        adb = self._adb
+        if not adb or not adb.ok or not adb.adb_path:
+            self._set_wifi_status("Wi-Fi: ADB not ready")
+            return
+        self._last_connect_attempt = 0.0
+        self._last_tcpip_attempt = 0.0
+        self._maybe_prepare_wifi(adb.adb_path)
+        self.refresh()
+
     def refresh(self) -> None:
         app_dir = app_dir_for_user_files()
         adb = find_adb(self._settings_store.settings.platform_tools_dir, app_dir)
@@ -192,33 +210,43 @@ class AdbMonitor(QObject):
     def _maybe_prepare_wifi(self, adb_path: str) -> None:
         settings = self._settings_store.settings
         if not self._wifi_enabled or settings.connection_mode != "usb_wifi":
+            self._set_wifi_status("")
             return
 
         endpoint = settings.wifi_endpoint.strip()
         if not endpoint:
+            self._set_wifi_status("Wi-Fi: set endpoint (ip[:port])")
             return
 
         host, port = parse_wifi_endpoint(endpoint)
         if not host:
+            self._set_wifi_status("Wi-Fi: invalid endpoint")
             return
 
         now = time.monotonic()
         devices = self._run_devices(adb_path)
+
+        if any(d.serial == f"{host}:{port}" and d.adb_state == "device" for d in devices):
+            self._set_wifi_status(f"Wi-Fi: connected to {host}:{port}")
+            return
 
         usb_ready = [d for d in devices if d.adb_state == "device" and ":" not in d.serial]
         if usb_ready and now - self._last_tcpip_attempt > 30:
             self._last_tcpip_attempt = now
             try:
                 run_quiet([adb_path, "-s", usb_ready[0].serial, "tcpip", str(port)], timeout=3)
-            except Exception:
-                pass
+                self._set_wifi_status(f"Wi-Fi: enabled tcpip:{port} via USB")
+            except Exception as e:
+                self._set_wifi_status(f"Wi-Fi: tcpip failed ({e})")
 
         if now - self._last_connect_attempt > 8:
             self._last_connect_attempt = now
             try:
-                run_quiet([adb_path, "connect", f"{host}:{port}"], timeout=3)
-            except Exception:
-                pass
+                cp = run_quiet([adb_path, "connect", f"{host}:{port}"], timeout=3)
+                out = (cp.stdout or "").strip()
+                self._set_wifi_status(f"Wi-Fi: {out or 'connect attempted'}")
+            except Exception as e:
+                self._set_wifi_status(f"Wi-Fi: connect failed ({e})")
 
 
     def set_selected_serial(self, serial: str | None) -> None:

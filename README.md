@@ -6,6 +6,8 @@ A simple GUI wrapper around scrcpy for casting a Meta Quest headset.
 - Windows + macOS (Apple Silicon)
 - USB casting
 - Optional USB + Wi-Fi workflow (`adb tcpip` + `adb connect`)
+- Manual **Connect Wi-Fi now** action in Advanced
+- Wi-Fi status line (connected / connect attempt / errors)
 - Read-only casting (`--no-control`)
 - PC audio off (`--no-audio`)
 - Traffic-light headset status
@@ -48,6 +50,7 @@ Result:
 - UI shows both modes
 - Wi-Fi endpoint field is available
 - App can prepare and connect over Wi-Fi
+- Wi-Fi status + manual connect tools are visible
 
 ## Requirements
 ### 1) Quest headset
@@ -85,6 +88,8 @@ LOGINVRCAST_WIFI_ENABLED=1 python -m loginvrcast
 Checks:
 - Advanced shows **USB only** and **USB + Wi-Fi**
 - Wi-Fi endpoint input is visible in USB + Wi-Fi mode
+- Click **Connect Wi-Fi now** to force immediate connect attempt
+- Wi-Fi status label shows recent operation results
 - With endpoint set, device can appear as `<ip>:<port>` after `adb connect`
 
 ### Automated checks
