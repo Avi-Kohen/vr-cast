@@ -157,6 +157,7 @@ class AdbMonitor(QObject):
         # Clear devices (don’t crash UI)
         if self._devices:
             self._devices = []
+            self._selected_serial = None
             self.devices_changed.emit(self._devices)
 
         if self._poll_pending and self._adb and self._adb.ok and self._adb.adb_path:
@@ -179,6 +180,10 @@ class AdbMonitor(QObject):
 
         # If adb not available -> clear devices once
         if not adb.ok or not adb.adb_path:
+            # Invalidate in-flight task results so stale completion is ignored.
+            self._poll_seq += 1
+            self._poll_pending = False
+
             if self._devices:
                 self._devices = []
                 self._selected_serial = None
