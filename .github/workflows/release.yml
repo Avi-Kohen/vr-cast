@@ -11,6 +11,13 @@ permissions:
 jobs:
   macos-arm64-release:
     runs-on: macos-14
+    env:
+      MACOS_CERT_B64: ${{ secrets.MACOS_CERT_B64 }}
+      MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+      MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
     steps:
       - uses: actions/checkout@v4
 
@@ -28,11 +35,7 @@ jobs:
         run: ./scripts/build_macos_arm64.sh
 
       - name: Optional code signing (if secrets are configured)
-        if: ${{ secrets.MACOS_CERT_B64 != '' && secrets.MACOS_CERT_PASSWORD != '' && secrets.MACOS_SIGN_IDENTITY != '' }}
-        env:
-          MACOS_CERT_B64: ${{ secrets.MACOS_CERT_B64 }}
-          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
-          MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
+        if: ${{ env.MACOS_CERT_B64 != '' && env.MACOS_CERT_PASSWORD != '' && env.MACOS_SIGN_IDENTITY != '' }}
         run: |
           echo "$MACOS_CERT_B64" | base64 --decode > cert.p12
           security create-keychain -p "" build.keychain
@@ -44,11 +47,7 @@ jobs:
           codesign --deep --force --options runtime --sign "$MACOS_SIGN_IDENTITY" dist/LoginVRCast-USB-WIFI.app
 
       - name: Optional notarization (if Apple credentials are configured)
-        if: ${{ secrets.APPLE_ID != '' && secrets.APPLE_APP_PASSWORD != '' && secrets.APPLE_TEAM_ID != '' }}
-        env:
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        if: ${{ env.APPLE_ID != '' && env.APPLE_APP_PASSWORD != '' && env.APPLE_TEAM_ID != '' }}
         run: |
           ditto -c -k --sequesterRsrc --keepParent dist/LoginVRCast-USB.app dist/LoginVRCast-USB.app.zip
           ditto -c -k --sequesterRsrc --keepParent dist/LoginVRCast-USB-WIFI.app dist/LoginVRCast-USB-WIFI.app.zip
