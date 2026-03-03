@@ -29,27 +29,27 @@ $common = @(
 )
 
 function Build-Variant([string]$name, [string]$hook, [string]$mode) {
-  $args = @()
-  $args += $common
-  $args += "--runtime-hook"
-  $args += $hook
+  $pyinstallerArgs = @()
+  $pyinstallerArgs += $common
+  $pyinstallerArgs += "--runtime-hook"
+  $pyinstallerArgs += $hook
 
   if ($mode -eq "onefile") {
-    $args += "--onefile"
+    $pyinstallerArgs += "--onefile"
   }
   elseif ($mode -eq "onedir") {
-    $args += "--onedir"
+    $pyinstallerArgs += "--onedir"
   }
   else {
     throw "Unsupported mode: $mode"
   }
 
-  $args += "--name"
-  $args += $name
-  $args += $Entrypoint
+  $pyinstallerArgs += "--name"
+  $pyinstallerArgs += $name
+  $pyinstallerArgs += $Entrypoint
 
   Write-Host "Building $name ($mode) ..."
-  & pyinstaller @args
+  & pyinstaller @pyinstallerArgs
 }
 
 if ($UsbOnly) {
