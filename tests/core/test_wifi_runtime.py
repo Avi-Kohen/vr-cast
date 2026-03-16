@@ -70,8 +70,8 @@ def test_plan_respects_throttle_windows():
         endpoint="192.168.1.2:5555",
         devices=[DeviceInfo(serial="USB123", adb_state="device")],
         now_s=10.0,
-        last_tcpip_attempt_s=5.0,
-        last_connect_attempt_s=6.0,
+        last_tcpip_attempt_s=0.0,
+        last_connect_attempt_s=8.0,
     )
     assert plan.should_tcpip is False
     assert plan.should_connect is False
@@ -139,6 +139,48 @@ def test_execute_wifi_plan_handles_connect_failure():
     )
 
     assert "connect failed" in result.status
+
+
+def test_execute_wifi_plan_retries_after_failed_connect_output():
+    plan = build_wifi_plan(
+        wifi_enabled=True,
+        connection_mode="usb_wifi",
+        endpoint="192.168.1.2:5555",
+        devices=[DeviceInfo(serial="USB123", adb_state="device")],
+        now_s=100.0,
+        last_tcpip_attempt_s=0.0,
+        last_connect_attempt_s=99.0,
+    )
+    calls: list[list[str]] = []
+    responses = iter([
+        "",
+        "failed to connect to 192.168.1.2:5555",
+        "",
+        "connected to 192.168.1.2:5555",
+    ])
+
+    def fake_run(cmd: list[str]) -> str:
+        calls.append(cmd)
+        return next(responses)
+
+    result = execute_wifi_plan(
+        plan=plan,
+        adb_path="/tmp/adb",
+        endpoint="192.168.1.2:5555",
+        devices=[DeviceInfo(serial="USB123", adb_state="device")],
+        now_s=100.0,
+        last_tcpip_attempt_s=0.0,
+        last_connect_attempt_s=99.0,
+        run_cmd=fake_run,
+    )
+
+    assert calls == [
+        ["/tmp/adb", "-s", "USB123", "tcpip", "5555"],
+        ["/tmp/adb", "connect", "192.168.1.2:5555"],
+        ["/tmp/adb", "disconnect", "192.168.1.2:5555"],
+        ["/tmp/adb", "connect", "192.168.1.2:5555"],
+    ]
+    assert "connected to" in result.status
 
 
 def test_manual_connect_policy_blocks_auto_connect_when_not_requested():

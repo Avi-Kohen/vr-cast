@@ -6,8 +6,8 @@ from typing import Callable
 from loginvrcast.core.state import DeviceInfo
 from loginvrcast.core.wifi import parse_wifi_endpoint
 
-TCPIP_INTERVAL_S = 30.0
-CONNECT_INTERVAL_S = 8.0
+TCPIP_INTERVAL_S = 15.0
+CONNECT_INTERVAL_S = 3.0
 
 
 @dataclass(frozen=True)
@@ -86,6 +86,8 @@ def execute_wifi_plan(
     if not plan.target:
         return WifiExecutionResult(status=status, tcpip_attempt_s=tcpip_attempt_s, connect_attempt_s=connect_attempt_s)
 
+    forced_connect_after_tcpip = False
+
     if plan.should_tcpip:
         usb_ready = next((d for d in devices if d.adb_state == "device" and ":" not in d.serial), None)
         if usb_ready:
@@ -94,13 +96,18 @@ def execute_wifi_plan(
                 _, port = parse_wifi_endpoint(endpoint)
                 run_cmd([adb_path, "-s", usb_ready.serial, "tcpip", str(port)])
                 status = f"Wi-Fi: enabled tcpip:{port} via USB"
+                forced_connect_after_tcpip = True
             except Exception as e:
                 status = f"Wi-Fi: tcpip failed ({e})"
 
-    if plan.should_connect:
+    if plan.should_connect or forced_connect_after_tcpip:
         connect_attempt_s = now_s
         try:
             out = run_cmd([adb_path, "connect", plan.target]).strip()
+            if _connect_failed(out):
+                run_cmd([adb_path, "disconnect", plan.target])
+                retry_out = run_cmd([adb_path, "connect", plan.target]).strip()
+                out = retry_out or out
             status = f"Wi-Fi: {out or 'connect attempted'}"
         except Exception as e:
             status = f"Wi-Fi: connect failed ({e})"
@@ -119,3 +126,10 @@ def apply_manual_connect_policy(*, manual_connect_requested: bool, plan_status: 
         return False, plan_status
 
     return False, f"Wi-Fi: ready ({target}) — press Connect Wi-Fi now"
+
+
+def _connect_failed(connect_output: str) -> bool:
+    text = connect_output.strip().lower()
+    if not text:
+        return False
+    return any(marker in text for marker in ("failed", "cannot", "unable", "refused", "timed out", "no route"))
