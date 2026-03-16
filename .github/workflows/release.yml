@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Existing git tag to publish (example: v1.2.3)'
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -20,6 +26,8 @@ jobs:
       APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
 
       - uses: actions/setup-python@v5
         with:
@@ -67,12 +75,15 @@ jobs:
           files: |
             dist/LoginVRCast-USB-macos-arm64.zip
             dist/LoginVRCast-USB-WIFI-macos-arm64.zip
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
           generate_release_notes: true
 
   windows-x64-release:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
 
       - uses: actions/setup-python@v5
         with:
@@ -98,6 +109,7 @@ jobs:
       - name: Publish GitHub Release assets (Windows)
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
           files: |
             dist/LoginVRCast-USB-windows-x64.zip
             dist/LoginVRCast-USB-WIFI-windows-x64.zip

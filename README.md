@@ -138,6 +138,7 @@ python -m py_compile src/loginvrcast/**/*.py
 
 ## Releases (tags)
 - Pushing a tag like `v1.2.3` triggers `.github/workflows/release.yml`.
+- You can also run it manually from **Actions → release → Run workflow** and provide `release_tag` (must already exist, e.g. `v1.2.3`).
 - The workflow builds macOS arm64 app bundles and Windows x64 onefile executables (USB-only + USB+Wi-Fi) and publishes them to the GitHub Release.
 - Optional signing/notarization is enabled when these repository secrets are configured:
   - `MACOS_CERT_B64`, `MACOS_CERT_PASSWORD`, `MACOS_SIGN_IDENTITY`
