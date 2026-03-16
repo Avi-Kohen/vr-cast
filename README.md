@@ -138,14 +138,17 @@ python -m py_compile src/loginvrcast/**/*.py
 
 ## Releases (tags)
 - Pushing a tag like `v1.2.3` triggers `.github/workflows/release.yml`.
-- The workflow builds macOS arm64 USB-only and USB+Wi-Fi artifacts and publishes them to the GitHub Release.
+- You can also run it manually from **Actions → release → Run workflow** and provide `release_tag` (must already exist, e.g. `v1.2.3`).
+- The workflow builds macOS arm64 app bundles and Windows x64 onefile executables (USB-only + USB+Wi-Fi) and publishes them to the GitHub Release.
 - Optional signing/notarization is enabled when these repository secrets are configured:
   - `MACOS_CERT_B64`, `MACOS_CERT_PASSWORD`, `MACOS_SIGN_IDENTITY`
   - `APPLE_ID`, `APPLE_APP_PASSWORD`, `APPLE_TEAM_ID`
 
 ## CI
 - GitHub Actions workflow runs unit tests and compile checks on push/PR (`.github/workflows/ci.yml`).
-- CI also builds and uploads macOS arm64 zipped app artifacts for both USB-only and USB+Wi-Fi variants.
+- CI also builds and uploads zipped artifacts for:
+  - macOS arm64 app bundles (USB-only + USB+Wi-Fi)
+  - Windows x64 onefile executables (USB-only + USB+Wi-Fi)
 
 ## Troubleshooting
 - Red “ADB not found”: set platform-tools folder in Advanced
