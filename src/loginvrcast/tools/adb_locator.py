@@ -18,6 +18,47 @@ def adb_filename() -> str:
     return "adb.exe" if _is_windows() else "adb"
 
 
+def _candidate_platform_tools_dirs(selected_path: Path) -> list[Path]:
+    """
+    Expand a user-provided path into likely platform-tools directories.
+
+    Supports selecting:
+    - the platform-tools folder directly
+    - Android SDK root folder (containing platform-tools/)
+    - adb executable itself
+    """
+    p = selected_path.expanduser()
+
+    candidates: list[Path] = []
+    if p.is_file() and p.name == adb_filename():
+        candidates.append(p.parent)
+
+    candidates.append(p)
+    candidates.append(p / "platform-tools")
+
+    deduped: list[Path] = []
+    seen: set[Path] = set()
+    for c in candidates:
+        if c in seen:
+            continue
+        seen.add(c)
+        deduped.append(c)
+    return deduped
+
+
+def resolve_platform_tools_dir(selected_path: Path) -> tuple[Path | None, str]:
+    """
+    Resolve the best platform-tools directory from user-provided path.
+    """
+    first_error = "Folder does not exist."
+    for candidate in _candidate_platform_tools_dirs(selected_path):
+        ok, msg = validate_platform_tools_dir(candidate)
+        if ok:
+            return candidate, "OK"
+        first_error = msg
+    return None, first_error
+
+
 def validate_platform_tools_dir(dir_path: Path) -> tuple[bool, str]:
     """
     Strict validation (as you requested):
@@ -53,10 +94,9 @@ def validate_platform_tools_dir(dir_path: Path) -> tuple[bool, str]:
 def find_adb(platform_tools_dir: str | None, app_dir: Path) -> AdbStatus:
     # 1) user-chosen platform-tools folder
     if platform_tools_dir:
-        p = Path(platform_tools_dir)
-        ok, msg = validate_platform_tools_dir(p)
-        if ok:
-            return AdbStatus(True, "ADB OK (custom folder)", str(p / adb_filename()))
+        resolved, _ = resolve_platform_tools_dir(Path(platform_tools_dir))
+        if resolved:
+            return AdbStatus(True, "ADB OK (custom folder)", str(resolved / adb_filename()))
         # If invalid, fall through (keep simple)
     # 2) ./platform-tools next to app
     local = app_dir / "platform-tools"

@@ -3,7 +3,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QUrl
+from PySide6.QtGui import QAction, QDesktopServices
 from PySide6.QtWidgets import (
     QComboBox,
     QFileDialog,
@@ -23,7 +24,7 @@ from loginvrcast.casting.scrcpy_manager import ScrcpyManager
 from loginvrcast.core.settings_store import SettingsStore
 from loginvrcast.core.state import AdbStatus, DeviceInfo, Light
 from loginvrcast.device.adb_monitor import AdbMonitor
-from loginvrcast.tools.adb_locator import validate_platform_tools_dir
+from loginvrcast.tools.adb_locator import resolve_platform_tools_dir
 from loginvrcast.core.wifi import validate_wifi_endpoint
 from loginvrcast.core.ui_state import wifi_controls_visible
 from loginvrcast.ui.widgets import TrafficLight
@@ -39,6 +40,8 @@ class MainWindow(QMainWindow):
     ):
         super().__init__()
         self.setWindowTitle("LoginVRCast")
+
+        self._build_menu_bar()
 
         self.settings_store = settings_store
         self.monitor = adb_monitor
@@ -133,12 +136,12 @@ class MainWindow(QMainWindow):
         adv_layout.addRow("Quality", self.quality_combo)
 
         self.crop_mode_combo = QComboBox()
-        self.crop_mode_combo.addItem("Official crop (--crop)", "official")
-        self.crop_mode_combo.addItem("Client crop (--client-crop)", "client")
+        self.crop_mode_combo.addItem("Device Rendering (--crop)", "official")
+        self.crop_mode_combo.addItem("Computer Rendering (--client-crop)", "client")
         idx = self.crop_mode_combo.findData(self.settings_store.settings.crop_mode)
         self.crop_mode_combo.setCurrentIndex(idx if idx != -1 else 0)
         self.crop_mode_combo.currentIndexChanged.connect(self._on_settings_changed)
-        adv_layout.addRow("Crop mode", self.crop_mode_combo)
+        adv_layout.addRow("Rendering mode", self.crop_mode_combo)
 
         self.crop_combo = QComboBox()
         self.crop_combo.addItems([
@@ -149,7 +152,7 @@ class MainWindow(QMainWindow):
         ])
         self.crop_combo.setCurrentText(self.settings_store.settings.crop_value)
         self.crop_combo.currentTextChanged.connect(self._on_settings_changed)
-        adv_layout.addRow("Crop", self.crop_combo)
+        adv_layout.addRow("Device Rendering", self.crop_combo)
 
         self.renderer_combo = QComboBox()
         self.renderer_combo.addItems(["direct3d", "opengl"])
@@ -170,6 +173,48 @@ class MainWindow(QMainWindow):
         self.scrcpy.started.connect(self._on_cast_started)
         self.scrcpy.stopped.connect(self._on_cast_stopped)
         self.scrcpy.error.connect(self._on_cast_error)
+
+    def _build_menu_bar(self) -> None:
+        menu = self.menuBar()
+
+        file_menu = menu.addMenu("&File")
+        exit_action = QAction("E&xit", self)
+        exit_action.triggered.connect(self.close)
+        file_menu.addAction(exit_action)
+
+        tools_menu = menu.addMenu("&Tools")
+
+        browse_adb_action = QAction("Select platform-tools folder…", self)
+        browse_adb_action.triggered.connect(self._browse_platform_tools)
+        tools_menu.addAction(browse_adb_action)
+
+        open_config_action = QAction("Open settings folder", self)
+        open_config_action.triggered.connect(self._open_settings_folder)
+        tools_menu.addAction(open_config_action)
+
+        help_menu = menu.addMenu("&Help")
+
+        setup_adb_action = QAction("ADB setup guide", self)
+        setup_adb_action.triggered.connect(self._open_readme_setup)
+        help_menu.addAction(setup_adb_action)
+
+        about_action = QAction("About LoginVRCast", self)
+        about_action.triggered.connect(self._show_about)
+        help_menu.addAction(about_action)
+
+    def _open_settings_folder(self) -> None:
+        cfg_dir = self.settings_store.path.parent
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(cfg_dir)))
+
+    def _open_readme_setup(self) -> None:
+        QDesktopServices.openUrl(QUrl("https://github.com/Avi-Kohen/LoginVRCast#setup-adb"))
+
+    def _show_about(self) -> None:
+        QMessageBox.information(
+            self,
+            "About LoginVRCast",
+            "LoginVRCast\nA simple GUI wrapper around scrcpy for Meta Quest casting.",
+        )
 
     def _sync_wifi_controls(self) -> None:
         wifi_mode = wifi_controls_visible(
@@ -210,12 +255,12 @@ class MainWindow(QMainWindow):
         if not folder:
             return
         p = Path(folder)
-        ok, msg = validate_platform_tools_dir(p)
-        if not ok:
+        resolved, msg = resolve_platform_tools_dir(p)
+        if not resolved:
             QMessageBox.critical(self, "Invalid platform-tools folder", msg)
             return
 
-        self.settings_store.settings.platform_tools_dir = str(p)
+        self.settings_store.settings.platform_tools_dir = str(resolved)
         self.settings_store.save()
         self.monitor.refresh()
 
