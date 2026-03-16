@@ -273,7 +273,7 @@ class AdbMonitor(QObject):
     def _maybe_prepare_wifi(self, adb_path: str) -> None:
         settings = self._settings_store.settings
         now = time.monotonic()
-        devices = self._run_devices(adb_path)
+        devices = list(self._devices)
         endpoint, auto_detected = self._effective_wifi_endpoint(adb_path, settings.wifi_endpoint.strip(), devices)
 
         plan = build_wifi_plan(
@@ -323,28 +323,6 @@ class AdbMonitor(QObject):
 
     def selected_serial(self) -> str | None:
         return self._selected_serial
-
-    def _run_devices(self, adb_path: str) -> list[DeviceInfo]:
-        try:
-            cp = run_quiet([adb_path, "devices", "-l"], timeout=2)
-        except Exception:
-            return []
-
-        lines = [ln.strip() for ln in (cp.stdout or "").splitlines() if ln.strip()]
-        out: list[DeviceInfo] = []
-        for ln in lines[1:]:
-            parts = ln.split()
-            if len(parts) < 2:
-                continue
-            serial = parts[0]
-            state = parts[1]
-            model = None
-            for p in parts[2:]:
-                if p.startswith("model:"):
-                    model = p.split("model:", 1)[1]
-                    break
-            out.append(DeviceInfo(serial=serial, adb_state=state, model=model))
-        return out
 
     def _apply_model(self, serial: str, model: str) -> None:
         new_list: list[DeviceInfo] = []
